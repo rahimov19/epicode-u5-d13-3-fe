@@ -18,6 +18,9 @@ import { io } from 'socket.io-client'
 // 6. If a client wants to display the list of online users, it should listen for the "loggedIn" event
 // 7. In this way the list of online users is updated only during login, but what happens if a new user joins? In this case we are not updating the list
 // 8. When a new user joins server emits another event called "updateOnlineUsersList", this is supposed to update the list when somebody joins or leaves. Clients they should listen for the "updateOnlineUsersList" event to update the list when somebody joins or leaves
+// 9. When the client sends a message we should trigger a "sendMessage" event
+// 10. Server listens for that and then it should broadcast that message to everybody but the sender by emitting an event called "newMessage"
+// 11. Anybody who is listening for a "newMessage" event will display that in the chat
 
 const socket = io("http://localhost:3001", { transports: ["websocket"] })
 // if you don't specify the transport ("websocket") socket.io will try to connect to the server by using Polling (old technique)
@@ -27,6 +30,7 @@ const Home = () => {
   const [message, setMessage] = useState("")
   const [loggedIn, setLoggedIn] = useState(false)
   const [onlineUsers, setOnlineUsers] = useState<User[]>([])
+  const [chatHistory, setChatHistory] = useState<Message[]>([])
 
   useEffect(() => {
     socket.on("welcome", welcomeMessage => {
@@ -43,11 +47,26 @@ const Home = () => {
         setOnlineUsers(onlineUsersList)
       })
     })
+
+    socket.on("newMessage", newMessage => {
+      console.log(newMessage)
+      setChatHistory([...chatHistory, newMessage.message])
+    })
   })
 
   const submitUsername = () => {
     // here we will be emitting a "setUsername" event (the server is already listening for that)
     socket.emit("setUsername", { username })
+  }
+
+  const sendMessage = () => {
+    const newMessage: Message = {
+      sender: username,
+      text: message,
+      createdAt: new Date().toLocaleString("en-US")
+    }
+    socket.emit("sendMessage", { message: newMessage })
+    setChatHistory([...chatHistory, newMessage])
   }
 
   return (
@@ -72,12 +91,15 @@ const Home = () => {
           {/* )} */}
           {/* MIDDLE AREA: CHAT HISTORY */}
           <ListGroup>
-
+            {chatHistory.map((message, index) => (<ListGroup.Item key={index}>{
+              <strong>{message.sender}</strong>
+            } | {message.text} at {message.createdAt}</ListGroup.Item>))}
           </ListGroup>
           {/* BOTTOM AREA: NEW MESSAGE */}
           <Form
             onSubmit={e => {
               e.preventDefault()
+              sendMessage()
             }}
           >
             <FormControl
